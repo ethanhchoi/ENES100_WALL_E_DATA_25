@@ -4,6 +4,11 @@
 #include "TLx493D_inc.hpp"
 #include <Wire.h>
 #include <Tank.h>
+//Required downloads^^
+//Main weird ones being the TLX + Enes100/Tank(these two are imported via zip downloads)
+
+
+//How do we Turn?? You tell me because math isn't mathing. Unless we had a whole steering system, we don't know how to turn. 
 
 //Defining Pins here
 #define FORWARD 0
@@ -11,6 +16,7 @@
 #define LEFT 2
 #define CUT -1
 
+//These are the orientations given Defined by the Aruco Marker relative to the OTV
 #define F_ORI -90
 #define L_ORI 90
 #define R_ORI -180
@@ -51,8 +57,13 @@
 #define TANK_R 2
 #define TANK_F 3
 
+//Bias Degree
+#define BIAS_DEG 2
+//Universal orientation: General Orientation for Forward
+#define UNI_F 0
+#define UNI_L 90
+#define UNI_R -90
 
-#define BIAS_DEG 10
 
 
 /*
@@ -87,7 +98,8 @@ MagnetoPacket m_pack;
 int USPinArr[6] = {echoPin1,trigPin1,echoPin2,trigPin2,echoPin3,trigPin3};//<-- Ignore for now... we might need mega
 int motorPinArr[6] = {motor1pin1,motor1pin2,motor2pin1,motor2pin2,motor1en,motor2en};
 int initAngle = 0;
-
+int DIR_OR[] = {FORWARD,LEFT,RIGHT};
+int DEG_DIR[] = {F_ORI,L_ORI,R_ORI};
 //ZoneCounter
 int zoneCounter = 0;
 
@@ -190,32 +202,42 @@ void printPacketData()
 //Determines which direction OTV is facing
 int currentDIR()
 {
-  //I want to define the directions. 
-  int DIR = 0;
-  if(c_pack.theta == 90)//I will enforce biases soon
+  //I want to define the directions.
+  for(int i=0;i<sizeof(DIR_OR)/sizeof(DIR_OR[0]);i++)
   {
-    DIR = FORWARD;
+    //Same Idea as if Direction + Bias > Current Angle > Direction - Bias
+    Serial.print(c_pack.theta);Serial.print(">");Serial.print(DEG_DIR[i]);Serial.print("-");Serial.println(BIAS_DEG);
+    Serial.print(c_pack.theta);Serial.print("<");Serial.print(DEG_DIR[i]);Serial.print("+");Serial.println(BIAS_DEG);    
+    if(c_pack.theta > DEG_DIR[i] - BIAS_DEG && c_pack.theta < DEG_DIR[i] + BIAS_DEG)
+    {
+      return DIR_OR[i];
+    }
   }
-  else if(c_pack.theta == 180)
-  {
-    DIR = LEFT;
-  }
-  else if(c_pack.theta == 0)
-  {
-    DIR = RIGHT;
-  }
-  return DIR;
+  // if(c_pack.theta > 90 - BIAS_DEG|| c_pack.theta < 90 + BIAS_DEG)//Bias 90 + bias > theta > 90 - bias 
+  // {
+  //   DIR = FORWARD;
+  // }
+  // else if(c_pack.theta == 180)//Bias range 
+  // {
+  //   DIR = LEFT;
+  // }
+  // else if(c_pack.theta == 0)
+  // {
+  //   DIR = RIGHT;
+  // }
+  // return DIR;
 } 
 //Determines direction of the Goal Zone
+//Helpful in telling us how to orientate the OTV
 int goalZoneDir()
 {
   //At every point, the Orientation will use SMARTMAPPING
   //I wanna argue like, based on orientation
-  if(c_pack.theta == 0)
+  if(c_pack.theta == UNI_F)
     return FORWARD;
-  else if(c_pack.theta == -90)
+  else if(c_pack.theta == UNI_L)
     return LEFT;
-  else if(c_pack.theta == 90)
+  else if(c_pack.theta == UNI_R)
     return RIGHT;
 }
 ///Motor Action Functions /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -336,7 +358,15 @@ void motorBreak()
 //Aruco should indicate mod 90 deg. Corrects OTV if not. 
 void adjustAngle()
 {
+  if(c_pack.theta%%90!=0)
+  {
+    //Turn by this much until we this angle
+    int offsetAngle = c_pack.theta%%90;
+    //Adjust the offseted angle
+    turnSet(LEFT,offsetAngle);
+    //Calculate RAD/Deg // Per Sec
 
+  }
 }
 //Reads distance between the Ultrasonics
 //DIR = Direction of Ultrasonic
@@ -480,7 +510,7 @@ void obsZone()
 {
   while(readDistance(FORWARD)>10)
   {
-
+    
   }
 }
 //Navigates the Open Zone
