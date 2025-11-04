@@ -64,8 +64,13 @@
 #define UNI_L 90
 #define UNI_R -90
 
+/*Tank Pins
+*/
 
-
+//Magnetic Sensor Pins: 
+//POWER Pin: Pin powering the Magnetic Sensor
+//Mag Documentation: https://arduino-xensiv-3d-magnetic-sensor-tlx493d.readthedocs.io/en/latest/api-ref.html
+#define POW_MAG 34
 /*
 Content of Code will be divided into: 
 - Initial Variables defined
@@ -107,18 +112,14 @@ void setup() {
   Serial.begin(9600);
   Wire.begin();
   /*
+  mag.setPowerPin(POW_MAG,OUTPUT,INPUT,HIGH,LOW,0,250000)//I assume delay until the magnetometer works?
   if(!mag.begin())
   {
     Serial.println("Magnetometer not starting");
     while(1);
   }
   */
-  if(TANK_MODE)
-  {
-    Tank.begin();
-    Serial.println("TANK_MODE Activated");
-  }
-  else
+  if(!TANK_MODE)
   {
     //Motor Setup
     for(int i=0;i<sizeof(motorPinArr)/sizeof(motorPinArr[0]);i++)
@@ -128,9 +129,14 @@ void setup() {
         digitalWrite(motorPinArr[i],LOW);//<-- All Motors are turned off initially
     }
   }
+  else
+  {
+    Tank.begin();
+    Serial.println("TANK_MODE Activated");
+  }
   Serial.println("Running:");
   //pwm.begin();
-  //pwm.setOscillatorFrequency();//Complete PWM  when done and also import laneZone() one. 
+  //pwm.setOscillatorFrequency();//Complete PWM  when done and also import laneZone(). 
   visionSetup();
   Serial.println("Vision system successful");
   /*
@@ -406,11 +412,14 @@ double readDistance(int DIR)
 void readMagnet()
 {
   double xMag,yMag,zMag;
-  mag.getMagneticField(&xMag, &yMag, &zMag);
-  //Magnetometer in X,Y,Z Coordinates
-  m_pack.x_mag = xMag;
-  m_pack.y_mag = yMag;
-  m_pack.z_mag = zMag;
+  //Reads + Saves magnetic cycle if it was successful. 
+  if(mag.getMagneticField(&xMag, &yMag, &zMag))
+  {
+    //Magnetometer in X,Y,Z Coordinates
+    m_pack.x_mag = xMag;
+    m_pack.y_mag = yMag;
+    m_pack.z_mag = zMag;
+  } 
 }
 //Measures the duty Cycle
 float readDutyCycle()
