@@ -22,26 +22,26 @@
 #define R_ORI -180
 
 //Ultrasonic Pins 1 = FORWARD, 2 = Right, 3 = Left
-#define echoPin1 1
-#define trigPin1 4
-#define echoPin2 5
-#define trigPin2 6
+#define echoPin1 18
+#define trigPin1 19
+#define echoPin2 27
+#define trigPin2 26
 #define echoPin3 99
 #define trigPin3 100
 
 #define teamMarker 13
 
 //ESP8826 Pins
-#define espRX 2
-#define expTX 3
+#define espRX 50
+#define expTX 52
 
 //L298N Motor Pins: 
-#define motor1pin1 5
-#define motor1pin2 6
+#define motor1pin1 11
+#define motor1pin2 10
 #define motor1en 4
-#define motor2pin1 10
-#define motor2pin2 11
-#define motor2en 12
+#define motor2pin1 9
+#define motor2pin2 8
+//#define motor2en 12
 
 //Duty Cycle Reader
 #define CYCLE_PIN 23
