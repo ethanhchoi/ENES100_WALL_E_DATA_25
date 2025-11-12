@@ -7,6 +7,13 @@
 //Required downloads^^
 //Main weird ones being the TLX + Enes100/Tank(these two are imported via zip downloads)
 
+//Final Launch Protocol: {TANK_MODE:false,enVision:true,espRX:espTX:}
+//Tank Protocol: {TANK_MODE:false,enVision:true,espRX:50,espTX:52}
+
+//Protocol Defining Variables: 
+#define TANK_MODE true
+#define enVision true
+
 
 //How do we Turn?? You tell me because math isn't mathing. Unless we had a whole steering system, we don't know how to turn. 
 
@@ -14,7 +21,7 @@
 #define FORWARD 0
 #define RIGHT 1
 #define LEFT 2
-#define CUT -1
+#define NONE -1 // No Direction Specified 
 
 //These are the orientations given Defined by the Aruco Marker relative to the OTV
 #define F_ORI -90
@@ -22,37 +29,32 @@
 #define R_ORI -180
 
 //Ultrasonic Pins 1 = FORWARD, 2 = Right, 3 = Left
-#define echoPin1 1
-#define trigPin1 4
-#define echoPin2 5
-#define trigPin2 6
-#define echoPin3 99
-#define trigPin3 100
+#define echoPin1 8
+#define trigPin1 9
+#define echoPin2 10
+#define trigPin2 11
+#define echoPin3 12
+#define trigPin3 13
 
 #define teamMarker 13
 
-//ESP8826 Pins
-#define espRX 2
-#define expTX 3
-
 //L298N Motor Pins: 
-#define motor1pin1 5
-#define motor1pin2 6
-#define motor1en 4
-#define motor2pin1 10
-#define motor2pin2 11
-#define motor2en 12
+#define motor1pin1 22
+#define motor1pin2 24
+#define motor1en 45
+#define motor2pin1 26
+#define motor2pin2 28
+#define motor2en 44
 
 //Duty Cycle Reader
 #define CYCLE_PIN 23
 
 //Servo Pins
-#define servoPin 35
+#define servoPin 2
 
 //Limit Switch
 #define LIM_SWITCH_PIN 11
 
-#define TANK_MODE true
 #define TANK_L 1
 #define TANK_R 2
 #define TANK_F 3
@@ -63,14 +65,19 @@
 #define UNI_F 0
 #define UNI_L 90
 #define UNI_R -90
+//Navigation Definitions
+#define midpoint_y 1.0
+#define bump_dist 10 //cm, the distance the otv reads before turning around
 
-/*Tank Pins
-*/
 
 //Magnetic Sensor Pins: 
 //POWER Pin: Pin powering the Magnetic Sensor
 //Mag Documentation: https://arduino-xensiv-3d-magnetic-sensor-tlx493d.readthedocs.io/en/latest/api-ref.html
 #define POW_MAG 34
+
+//ESP8826 Pins
+#define espRX 50
+#define espTX 52
 /*
 Content of Code will be divided into: 
 - Initial Variables defined
@@ -81,6 +88,8 @@ Content of Code will be divided into:
   - Motors
   - Ultrasonic Sensors
   - Magnetic Sensors
+- Navigation Sensors
+- Zone Functions
 */
 //Servo Motor Pin: Continuous 
 using namespace ifx::tlx493d;
@@ -107,7 +116,6 @@ int DIR_OR[] = {FORWARD,LEFT,RIGHT};
 int DEG_DIR[] = {F_ORI,L_ORI,R_ORI};
 //ZoneCounter
 int zoneCounter = 0;
-
 void setup() {
   Serial.begin(9600);
   Wire.begin();
@@ -136,9 +144,10 @@ void setup() {
   }
   Serial.println("Running:");
   //pwm.begin();
-  //pwm.setOscillatorFrequency();//Complete PWM  when done and also import laneZone(). 
-  visionSetup();
-  Serial.println("Vision system successful");
+  //pwm.setOscillatorFrequency();//Complete PWM  when done and also import laneZone().
+  if(enVision)
+    visionSetup();
+    Serial.println("Vision system successful");
   /*
   //Declaring Ultrasonic pins here
   for(int i=0;i<3;i++)
@@ -156,7 +165,7 @@ void setup() {
 void visionSetup()
 {
   char teamName[] = "Wall-E";
-  Enes100.begin("Wall-E",DATA,teamMarker,1120,3,2);//; Vision System down...
+  Enes100.begin("Wall-E",DATA,teamMarker,1120,espTX,espRX);//; Vision System down...
   Enes100.println("Ambautakaum");
   //If (isConnected() + isVisible()) -> True? 
   if(Enes100.isConnected())
@@ -212,6 +221,8 @@ int currentDIR()
   for(int i=0;i<sizeof(DIR_OR)/sizeof(DIR_OR[0]);i++)
   {
     //Same Idea as if Direction + Bias > Current Angle > Direction - Bias
+    //Ex: 90 + 2 > 90 > 90 - 88 
+    //It's like 90 degrees
     Serial.print(c_pack.theta);Serial.print(">");Serial.print(DEG_DIR[i]);Serial.print("-");Serial.println(BIAS_DEG);
     Serial.print(c_pack.theta);Serial.print("<");Serial.print(DEG_DIR[i]);Serial.print("+");Serial.println(BIAS_DEG);    
     if(c_pack.theta > DEG_DIR[i] - BIAS_DEG && c_pack.theta < DEG_DIR[i] + BIAS_DEG)
@@ -219,32 +230,21 @@ int currentDIR()
       return DIR_OR[i];
     }
   }
-  // if(c_pack.theta > 90 - BIAS_DEG|| c_pack.theta < 90 + BIAS_DEG)//Bias 90 + bias > theta > 90 - bias 
-  // {
-  //   DIR = FORWARD;
-  // }
-  // else if(c_pack.theta == 180)//Bias range 
-  // {
-  //   DIR = LEFT;
-  // }
-  // else if(c_pack.theta == 0)
-  // {
-  //   DIR = RIGHT;
-  // }
-  // return DIR;
 } 
 //Determines direction of the Goal Zone
 //Helpful in telling us how to orientate the OTV
 int goalZoneDir()
 {
   //At every point, the Orientation will use SMARTMAPPING
-  //I wanna argue like, based on orientation
+  //If facing forward => Forward
+  //If facing left => Right
+  //If facing right => Left
   if(c_pack.theta == UNI_F)
     return FORWARD;
   else if(c_pack.theta == UNI_L)
-    return LEFT;
-  else if(c_pack.theta == UNI_R)
     return RIGHT;
+  else if(c_pack.theta == UNI_R)
+    return LEFT;
 }
 ///Motor Action Functions /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -252,11 +252,7 @@ int goalZoneDir()
 void motorRun(int DIR, int speed)
 {
   //DIR = Direction we're going
-  //speed = At what speed?
-
-  //Setting speeds of Motors
-  analogWrite(motorPinArr[(sizeof(motorPinArr)/sizeof(motorPinArr[0]))-2],speed);
-  analogWrite(motorPinArr[(sizeof(motorPinArr)/sizeof(motorPinArr[0]))-1],speed);
+  //speed = Speed we're going at
   if(TANK_MODE)
   {
     switch(DIR)
@@ -284,33 +280,38 @@ void motorRun(int DIR, int speed)
   switch(DIR)
   {
     case FORWARD: {
-      //configure Motor1
-      //analogWrite(motorPinArr[(sizeof(motorPinArr)/sizeof(motorPinArr[0]))-2],speed);
-
-      digitalWrite(motorPinArr[0],LOW);
-      digitalWrite(motorPinArr[1],HIGH);//Switch if this is wheel is going reverse
-      //Configure motor2
-      //analogWrite(motorPinArr[(sizeof(motorPinArr)/sizeof(motorPinArr[0]))-1],speed);
-      digitalWrite(motorPinArr[2],HIGH);//Also this is switched from other motor because 2 motors ==> normal|flipped
-      digitalWrite(motorPinArr[3],LOW);//Switch if this is wheel is going reverse
+      //configure Motor1 to be both equal
+      for(int i=0;i<2;i++)
+      {
+        digitalWrite(motorPinArr[i],HIGH);
+        digitalWrite(motorPinArr[i+1],LOW);
+        analogWrite(motorPinArr[4+i],speed);
+      }
       break;
     }
     case LEFT:
     {
-      //Motor 1
+      //Tells the motor to turn Left
       digitalWrite(motorPinArr[0],LOW);
       digitalWrite(motorPinArr[1],HIGH);
-
-      digitalWrite(motorPinArr[2],LOW);
-      digitalWrite(motorPinArr[3],HIGH);
+      digitalWrite(motorPinArr[2],HIGH);
+      digitalWrite(motorPinArr[3],LOW);
+      analogWrite(motorPinArr[4],speed);
+      analogWrite(motorPinArr[5],speed);
+      Serial.println("Turning Left");
+      break;
     }
     case RIGHT:
     {
+      //Tells the motor to turn right
       digitalWrite(motorPinArr[0],HIGH);
       digitalWrite(motorPinArr[1],LOW);
-
-      digitalWrite(motorPinArr[2],HIGH);
-      digitalWrite(motorPinArr[3],LOW);
+      digitalWrite(motorPinArr[2],LOW);
+      digitalWrite(motorPinArr[3],HIGH);
+      analogWrite(motorPinArr[4],speed);
+      analogWrite(motorPinArr[5],speed);
+      Serial.println("Turning Right");
+      break;
     }
   }
 }
@@ -326,6 +327,7 @@ void turnSet(int DIR, int angle, int speed = 100)
     motorRun(DIR,speed);
     pingPacketData();//Updates the Angle data
   }
+  adjustAngle();
 }
 //Turns 90 degrees in a direction L/R
 void turnDirection(int DIR,int speed = 100)//Assumes 90 degrees
@@ -340,6 +342,7 @@ void turnDirection(int DIR,int speed = 100)//Assumes 90 degrees
   else
     degAddVal = 90;
   int goalDeg = degAddVal+initDeg;//Initial Degree Count + 90|-90
+  //While the orientation is not facing goal direction
   while(c_pack.theta!=goalDeg)
   {
     motorRun(DIR,speed);
@@ -364,13 +367,21 @@ void motorBreak()
 //Aruco should indicate mod 90 deg. Corrects OTV if not. 
 void adjustAngle()
 {
-  if(c_pack.theta%%90!=0)
+  //Plan 1: Adjust to the closest value of ||-90|| ||0|| ||90||
+  //Plan 2: Rotate to the desired rotation (pass in a value)
+  if(c_pack.theta%90==0)
+    return;  
+  math.abs(-90 - c_pack.theta)
+  //Turn by this much until we hit this angle
+  int offsetAngle = c_pack.theta%90;
+  //-90 | 0 | 90
+  //Adjust to be closest to be one of these Angles
+  if(offsetAngle > 0)
   {
-    //Turn by this much until we this angle
-    int offsetAngle = c_pack.theta%%90;
     //Adjust the offseted angle
-    turnSet(LEFT,offsetAngle);
-    //Calculate RAD/Deg // Per Sec
+    turnSet(RIGHT,offsetAngle);
+  }
+  //Calculate RAD/Deg // Per Sec
 
   }
 }
@@ -406,6 +417,8 @@ double readDistance(int DIR)
     //2 is for back and forth reading
     return (double)(duration*0.0343/2);//Distance in cm
 }
+//Might consider making a function that tells me which side is blocked
+
 //Magnet Functions /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //Detects magnetic fields. 
@@ -425,7 +438,6 @@ void readMagnet()
 float readDutyCycle()
 {
   //We could get the averages of the amount measured
-  //
   int validCounts = 0,dutyCycle=0;
   for(int i=0;i<20;i++)
   {
@@ -441,17 +453,29 @@ float readDutyCycle()
     return 0;
   return dutyCycle/validCounts;
 }
+//Tells me if the direction is cleared
+bool dirIsClear(int DIR)
+{
+  //If Direction is smaller than a certain amount
+  return readDistance(DIR) > bump_dist;
+}
+
+//Rack and Pinion//////////////////////////////////////////////////////////////////////////////////////////////
+//Rack and Pinion go down with the servo
 //Picks up the Puck and measures Duty Cycle and Puck Magnetism 
 void pickUp()
 {
   //Continuously Rotate to lower -->
-  //180 -> Rotate One way Forward
+  //180 -> Rotate Counterclockwise
   //90 -> Stop
-  //0 -> Rotate The other way
+  //0 -> Rotate Clockwise(downward)
   while(digitalRead(LIM_SWITCH_PIN)==LOW)//Lim switch hasnt been hit. 
   {
-    rackServo.write(180);
+    rackServo.write(80);//Smaller the number -> Faster it is 
+    delay(100);
   }
+  //Tells the servo to stop when it reaches the ground
+  rackServo.write(90);
 
   //Item gets picked up and is close enough for readings.
   //If at any point, if readMagnet() reads > (X an amount), -> break for loop
@@ -466,7 +490,6 @@ void pickUp()
   if(isMagnetic())
   {
     //If anything is above 5 micro Gauss, --> There is a magnet
-    
     int dutyCycle = readDutyCycle();
     Enes100.mission(MAGNETISM,MAGNETIC);
     Enes100.mission(CYCLE,dutyCycle);
@@ -475,8 +498,51 @@ void pickUp()
   {
     Enes100.mission(MAGNETISM,NOT_MAGNETIC);
   }
-  rackServo.write(90);
-  //(Surely they were hoping to use a limit switch)
+  //Pulls it out of the container
+  rackServo.write(150);
+  delay(300);
+}
+
+//Nav Functions //////////////////////////////////////////////////////////////////////////////////////////////
+
+//Moves Forward until it detects something
+void forwardUntilDetect(int DIR=-1)
+{
+  //10 is temporary, I need to see the size of the Rack and Pinion
+  
+  if(DIR==-1)
+  {
+    while(readDistance(FORWARD) > bump_dist)
+    {
+      motorRun(FORWARD,255);
+      delay(50);
+    }
+    return;
+  }
+  //Moves OTV forward until the direction indicated(most likely towards the center is cleared)
+  while(readDistance(FORWARD) > bump_dist)
+  {
+    //If The Ultrasonic sensor was passed in, detect if that side is opened
+    if(dirIsClear(DIR))
+    {
+      break;
+    }
+    motorRun(FORWARD,255);
+    delay(50);
+  }
+}
+//Turns the OTV in the direction of where the center point is
+//Defaults to right if it's at the center
+void turnToCenter()
+{
+  if(c_pack.y_coord > midpoint_y)//Above midpoint line
+  {
+    turnDirection(RIGHT);
+  }
+  else
+  {
+    turnDirection(LEFT);
+  }
 }
 //Zone Functions /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -491,47 +557,58 @@ void landZone()
   //If above x coord, turn other way
   //else if below 
   //turnDirection()
-  if(c_pack.y_coord > 1.0)//This means it's above the mid-point line
-  {
-    //Turn until Angle reached
-    //Turn 90 deg angle
-    turnSet(RIGHT,-90);
-  }
-  else
-  {
-    turnSet(LEFT,90);
-  }
-  //Move until the FORWARD Sensor reads 
-  //10 is temporary, I need to see the size of the Rack and Pinion
-  while(readDistance(FORWARD)>10)
-  {
-    motorRun(FORWARD,255);
-  }
+  turnToCenter(); 
+  forwardUntilDetect();
   //Distance from Rack and Pinion to Arduino
-  //PickUp <-- I'll look into servo like rn
   pickUp();
-  turnDirection(RIGHT);
+  turnDirection(goalZoneDir());
   //If any m_pack coords are > biasAmount --> Enes Write IsMagnetic();
   zoneCounter+=1;
 }
 //Navigates the Obstacle Zone
 void obsZone()
 {
-  while(readDistance(FORWARD)>10)
+  //Moves forward until something is detected
+  forwardUntilDetect();
+  //Turns the direction towards the center point y > 1 or y < 1
+  turnToCenter();
+  //Move forward until the direction towards center is cleared
+  forwardUntilDetect(goalZoneDir());
+  //Either both sides are blocked or 
+  if(!dirIsClear(goalZoneDir()) && !dirIsClear(FRONT))
   {
-    
+    //If the direction of the goalzone is blocked and front is blocked
+    //180 and repeat
+    turnSet(goalZoneDir(),180);
+    forwardUntilDetect(goalZoneDir());
   }
 }
 //Navigates the Open Zone
 void openZone()
 {
-
+  //If above Y Axis
+  if(c_pack.y_coord > 0.75)
+  {
+    turnDirection(RIGHT);
+    while(c_pack.y_coord > 0.75)
+    {
+      motorRun(FOWARD,255);
+    }
+    turnDirection(LEFT);
+    //Move until below y > 0.75
+  }
+  //MoveOverLog
+  while(c_pack.x_coord < 3.76)
+  {
+    motorRun(FORWARD,255);
+  }
 }
 //test functions: /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void testCase1()
 {
   pingPacketData();
   printPacketData();
+  Serial.println(goalZoneDir());
 }
 //Testing the Duty Cycle Measurement
 void testCase2()
@@ -547,19 +624,26 @@ void testCase3()
 void testCase4()
 {
   motorRun(LEFT,100);
+  delay(500);
+  motorRun(RIGHT,100);
 }
 //Obstacle Sensing
 void testCase5()
 {
   readDistance(FORWARD);
 }
-//Mission Sensing
+//
 void testCase6()
 {
   Serial.println(readDutyCycle());
 }
 //Avoiding one item
 void testCase7()
+{
+  
+}
+//void checking which way I'm facing
+void testCase8()
 {
 
 }
@@ -572,12 +656,12 @@ void loop() {
     {
       //landZone();
       testCase1();
-      testCase3();
-      testCase5();
+
       break;
     }
     case 1:
     {
+      //If at any point, the chasis reaches x > openzone -> stop
       obsZone();
       break;
     }
@@ -590,13 +674,5 @@ void loop() {
   //Functions I need: Move Forward
   //Map Update,Get,
   //Data Scan function
-  //Overall it should be, move towards the Goal Zone... We can choose the Aruco Marker as the goal
-
-  //Testing in lab goal
-  //Vision System
-  //Finalize Budget --> MEGA, Magnetometer Please, DC Motor(Buy 1 more)
-  //Sell everything final.  
+  //Overall it should be, move towards the Goal Zone... We can choose the Aruco Marker as the goal  
 }
-
-//Easy Route -> 2 Limit Switches.
-//Hard Route -> Calculate amount of time in between
