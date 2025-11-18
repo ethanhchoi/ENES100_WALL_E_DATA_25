@@ -1,9 +1,12 @@
+#include <TLx493D_inc.hpp>
+
 #include <Servo.h>
 #include "Enes100.h"
 #include <math.h>
 #include "TLx493D_inc.hpp"
 #include <Wire.h>
 #include <Tank.h>
+
 //Required downloads^^
 //Main weird ones being the TLX + Enes100/Tank(these two are imported via zip downloads)
 
@@ -11,8 +14,8 @@
 //Tank Protocol: {TANK_MODE:false,enVision:true,espRX:50,espTX:52}
 
 //Protocol Defining Variables: 
-#define TANK_MODE true
-#define enVision true
+#define TANK_MODE false
+#define enVision false
 
 
 //How do we Turn?? You tell me because math isn't mathing. Unless we had a whole steering system, we don't know how to turn. 
@@ -93,7 +96,7 @@ Content of Code will be divided into:
 */
 //Servo Motor Pin: Continuous 
 using namespace ifx::tlx493d;
-TLx493D_A1B6 mag(Wire, TLx493D_IIC_ADDR_A0_e);
+TLx493D_A1B6 mag(Wire, TLx493D_IIC_ADDR_A0_e);//Check this when you come back
 Servo rackServo;
 
 struct CoordinatePacket {
@@ -119,14 +122,12 @@ int zoneCounter = 0;
 void setup() {
   Serial.begin(9600);
   Wire.begin();
-  /*
-  mag.setPowerPin(POW_MAG,OUTPUT,INPUT,HIGH,LOW,0,250000)//I assume delay until the magnetometer works?
+  //mag.setPowerPin(POW_MAG,OUTPUT,INPUT,HIGH,LOW,0,250000)//I assume delay until the magnetometer works?
   if(!mag.begin())
   {
     Serial.println("Magnetometer not starting");
     while(1);
   }
-  */
   if(!TANK_MODE)
   {
     //Motor Setup
@@ -371,7 +372,7 @@ void adjustAngle()
   //Plan 2: Rotate to the desired rotation (pass in a value)
   if(c_pack.theta%90==0)
     return;  
-  math.abs(-90 - c_pack.theta)
+ //math.abs(-90 - c_pack.theta)
   //Turn by this much until we hit this angle
   int offsetAngle = c_pack.theta%90;
   //-90 | 0 | 90
@@ -383,8 +384,8 @@ void adjustAngle()
   }
   //Calculate RAD/Deg // Per Sec
 
-  }
 }
+
 //Reads distance between the Ultrasonics
 //DIR = Direction of Ultrasonic
 //1 = FORWARD
@@ -424,15 +425,14 @@ double readDistance(int DIR)
 //Detects magnetic fields. 
 void readMagnet()
 {
-  double xMag,yMag,zMag;
-  //Reads + Saves magnetic cycle if it was successful. 
-  if(mag.getMagneticField(&xMag, &yMag, &zMag))
-  {
-    //Magnetometer in X,Y,Z Coordinates
+  double xMag, yMag, zMag;   // float is enough for most magnetometers
+  // Attempt read
+  if(mag.getMagneticField(&xMag, &yMag, &zMag)) {
     m_pack.x_mag = xMag;
     m_pack.y_mag = yMag;
     m_pack.z_mag = zMag;
-  } 
+  }
+  delay(50);
 }
 //Measures the duty Cycle
 float readDutyCycle()
@@ -575,6 +575,7 @@ void obsZone()
   //Move forward until the direction towards center is cleared
   forwardUntilDetect(goalZoneDir());
   //Either both sides are blocked or 
+  /*
   if(!dirIsClear(goalZoneDir()) && !dirIsClear(FRONT))
   {
     //If the direction of the goalzone is blocked and front is blocked
@@ -582,6 +583,7 @@ void obsZone()
     turnSet(goalZoneDir(),180);
     forwardUntilDetect(goalZoneDir());
   }
+  */
 }
 //Navigates the Open Zone
 void openZone()
@@ -592,7 +594,7 @@ void openZone()
     turnDirection(RIGHT);
     while(c_pack.y_coord > 0.75)
     {
-      motorRun(FOWARD,255);
+      motorRun(FORWARD,255);
     }
     turnDirection(LEFT);
     //Move until below y > 0.75
@@ -635,7 +637,7 @@ void testCase5()
 //
 void testCase6()
 {
-  Serial.println(readDutyCycle());
+
 }
 //Avoiding one item
 void testCase7()
@@ -647,6 +649,13 @@ void testCase8()
 {
 
 }
+//Test Magnetic Fields
+void testCase9()
+{
+  readMagnet();
+  Serial.print(m_pack.x_mag);Serial.print(m_pack.y_mag);Serial.println(m_pack.z_mag);
+  Serial.println(isMagnetic());
+}
 //
 //Loop /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void loop() {
@@ -654,8 +663,9 @@ void loop() {
   {
     case 0:
     {
+      //Put code into here
       //landZone();
-      testCase1();
+      testCase9();
 
       break;
     }
@@ -676,3 +686,11 @@ void loop() {
   //Data Scan function
   //Overall it should be, move towards the Goal Zone... We can choose the Aruco Marker as the goal  
 }
+//Whoever is reading this
+//Put all tests Case 0:{code here} Line 664
+//Run testCase9() if you figure out the magnetometer
+//testCase1(): To run this enable vision. 
+//testCase2(): runDutyCycle if you wire the Dutycycle wires up
+//testCase3(): The motor runs forward. 
+//testCase4(): Motor turns both ways. //Only test this if testCase3 works.(If not try on your laptop and see if your wheel code works) 
+//Change pins on #define if you want to modify this code
