@@ -1,9 +1,7 @@
-#include <TLx493D_inc.hpp>
-
+#include <Tlv493d.h>
 #include <Servo.h>
 #include "Enes100.h"
 #include <math.h>
-#include "TLx493D_inc.hpp"
 #include <Wire.h>
 #include <Tank.h>
 
@@ -16,6 +14,7 @@
 //Protocol Defining Variables: 
 #define TANK_MODE false
 #define enVision false
+#define MAGNET_ON false
 
 
 //How do we Turn?? You tell me because math isn't mathing. Unless we had a whole steering system, we don't know how to turn. 
@@ -95,8 +94,8 @@ Content of Code will be divided into:
 - Zone Functions
 */
 //Servo Motor Pin: Continuous 
-using namespace ifx::tlx493d;
-TLx493D_A1B6 mag(Wire, TLx493D_IIC_ADDR_A0_e);//Check this when you come back
+
+Tlv493d Tlv493dMagnetic3DSensor = Tlv493d();
 Servo rackServo;
 
 struct CoordinatePacket {
@@ -122,12 +121,15 @@ int zoneCounter = 0;
 void setup() {
   Serial.begin(9600);
   Wire.begin();
-  //mag.setPowerPin(POW_MAG,OUTPUT,INPUT,HIGH,LOW,0,250000)//I assume delay until the magnetometer works?
-  if(!mag.begin())
+  Tlv493dMagnetic3DSensor.begin();
+  Tlv493dMagnetic3DSensor.setAccessMode(Tlv493dMagnetic3DSensor.MASTERCONTROLLEDMODE);
+  Tlv493dMagnetic3DSensor.disableTemp();
+  /*
+  if()
   {
     Serial.println("Magnetometer not starting");
     while(1);
-  }
+  }*/
   if(!TANK_MODE)
   {
     //Motor Setup
@@ -425,13 +427,23 @@ double readDistance(int DIR)
 //Detects magnetic fields. 
 void readMagnet()
 {
-  double xMag, yMag, zMag;   // float is enough for most magnetometers
-  // Attempt read
-  if(mag.getMagneticField(&xMag, &yMag, &zMag)) {
-    m_pack.x_mag = xMag;
-    m_pack.y_mag = yMag;
-    m_pack.z_mag = zMag;
-  }
+  //Optional
+  delay(Tlv493dMagnetic3DSensor.getMeasurementDelay());
+  Tlv493dMagnetic3DSensor.updateData();
+
+  //Read the X,Y,Z Magnetometer 
+  m_pack.x_mag = Tlv493dMagnetic3DSensor.getX();
+  m_pack.y_mag = Tlv493dMagnetic3DSensor.getY();
+  m_pack.z_mag = Tlv493dMagnetic3DSensor.getZ();
+
+
+  Serial.print("X = ");
+  Serial.print(m_pack.x_mag);
+  Serial.print(" mT; Y = ");
+  Serial.print(m_pack.y_mag);
+  Serial.print(" mT; Z = ");
+  Serial.print(m_pack.z_mag);
+  Serial.println(" mT");
   delay(50);
 }
 //Measures the duty Cycle
