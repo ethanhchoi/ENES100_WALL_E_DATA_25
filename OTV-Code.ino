@@ -1,4 +1,3 @@
-#include <Tlv493d.h>
 #include <Servo.h>
 #include "Enes100.h"
 #include <math.h>
@@ -14,7 +13,6 @@
 //Protocol Defining Variables: 
 #define TANK_MODE false
 #define enVision false
-#define MAGNET_ON false
 
 
 //How do we Turn?? You tell me because math isn't mathing. Unless we had a whole steering system, we don't know how to turn. 
@@ -38,7 +36,7 @@
 #define echoPin3 12
 #define trigPin3 13
 
-#define teamMarker 13
+#define teamMarker 257
 
 //L298N Motor Pins: 
 #define motor1pin1 22
@@ -49,7 +47,7 @@
 #define motor2en 44
 
 //Duty Cycle Reader
-#define CYCLE_PIN 23
+#define CYCLE_PIN 5
 
 //Servo Pins
 #define servoPin 2
@@ -71,11 +69,11 @@
 #define midpoint_y 1.0
 #define bump_dist 10 //cm, the distance the otv reads before turning around
 
+#define MAGNET_PIN 21
 
 //Magnetic Sensor Pins: 
 //POWER Pin: Pin powering the Magnetic Sensor
 //Mag Documentation: https://arduino-xensiv-3d-magnetic-sensor-tlx493d.readthedocs.io/en/latest/api-ref.html
-#define POW_MAG 34
 
 //ESP8826 Pins
 #define espRX 50
@@ -95,7 +93,6 @@ Content of Code will be divided into:
 */
 //Servo Motor Pin: Continuous 
 
-Tlv493d Tlv493dMagnetic3DSensor = Tlv493d();
 Servo rackServo;
 
 struct CoordinatePacket {
@@ -104,13 +101,7 @@ struct CoordinatePacket {
   int theta;
   bool isVisible;
 };
-struct MagnetoPacket {
-  float x_mag;//Milli Gauss
-  float y_mag;//Milli Gauss
-  float z_mag;//Milli Gauss 
-};
 CoordinatePacket c_pack;
-MagnetoPacket m_pack;
 int USPinArr[6] = {echoPin1,trigPin1,echoPin2,trigPin2,echoPin3,trigPin3};//<-- Ignore for now... we might need mega
 int motorPinArr[6] = {motor1pin1,motor1pin2,motor2pin1,motor2pin2,motor1en,motor2en};
 int initAngle = 0;
@@ -121,15 +112,8 @@ int zoneCounter = 0;
 void setup() {
   Serial.begin(9600);
   Wire.begin();
-  Tlv493dMagnetic3DSensor.begin();
-  Tlv493dMagnetic3DSensor.setAccessMode(Tlv493dMagnetic3DSensor.MASTERCONTROLLEDMODE);
-  Tlv493dMagnetic3DSensor.disableTemp();
-  /*
-  if()
-  {
-    Serial.println("Magnetometer not starting");
-    while(1);
-  }*/
+  pinMode(MAGNET_PIN,INPUT);
+  pinMode(CYCLE_PIN,INPUT);
   if(!TANK_MODE)
   {
     //Motor Setup
@@ -146,19 +130,15 @@ void setup() {
     Serial.println("TANK_MODE Activated");
   }
   Serial.println("Running:");
-  //pwm.begin();
-  //pwm.setOscillatorFrequency();//Complete PWM  when done and also import laneZone().
   if(enVision)
     visionSetup();
     Serial.println("Vision system successful");
-  /*
   //Declaring Ultrasonic pins here
   for(int i=0;i<3;i++)
   {
     pinMode(USPinArr[2*i],INPUT);//Echo -> Input
     pinMode(USPinArr[2*i+1],OUTPUT);//Trigger -> Output
   }
-  */
   rackServo.attach(servoPin);
   //Set up the magnetometer
   //dPin, Dir
@@ -169,7 +149,7 @@ void visionSetup()
 {
   char teamName[] = "Wall-E";
   Enes100.begin("Wall-E",DATA,teamMarker,1120,espTX,espRX);//; Vision System down...
-  Enes100.println("Ambautakaum");
+  Enes100.println("We Connected");
   //If (isConnected() + isVisible()) -> True? 
   if(Enes100.isConnected())
   {
@@ -189,10 +169,7 @@ int radToDeg(float radAng)
 {
   return (int)((radAng*180)/M_PI); // angle * 180(deg) / PI
 }
-bool isMagnetic()
-{
-  return(m_pack.x_mag > 5||m_pack.y_mag > 5||m_pack.z_mag > 5);
-}
+
 //Vision System Functions /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //Pings the Enes100 Server.
@@ -399,12 +376,6 @@ void adjustAngle()
 //Reads the distance between the Ultrasonic in the LEFT/RIGHT/FORWARD direction
 double readDistance(int DIR)
 { 
-  if(TANK_MODE)
-  {
-    Enes100.print("Ultrasonic Reading: ");
-    Enes100.println(Tank.readDistanceSensor(1));
-    return;
-  }
   //Trigger Pin: Direction * 2 - 1
     int trigPin = (DIR*2)+1;
     //Low to reset pin
@@ -425,45 +396,28 @@ double readDistance(int DIR)
 //Magnet Functions /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //Detects magnetic fields. 
-void readMagnet()
+bool isMagnetic()
 {
-  //Optional
-  delay(Tlv493dMagnetic3DSensor.getMeasurementDelay());
-  Tlv493dMagnetic3DSensor.updateData();
-
-  //Read the X,Y,Z Magnetometer 
-  m_pack.x_mag = Tlv493dMagnetic3DSensor.getX();
-  m_pack.y_mag = Tlv493dMagnetic3DSensor.getY();
-  m_pack.z_mag = Tlv493dMagnetic3DSensor.getZ();
-
-
-  Serial.print("X = ");
-  Serial.print(m_pack.x_mag);
-  Serial.print(" mT; Y = ");
-  Serial.print(m_pack.y_mag);
-  Serial.print(" mT; Z = ");
-  Serial.print(m_pack.z_mag);
-  Serial.println(" mT");
-  delay(50);
+  return digitalRead(MAGNET_PIN)==LOW;
+}
+//Corrects the angle until the closest interval
+void correctAngle(int angle = 90)
+{
+  //Turn amount should be like 90 - CurrentAngle; 
 }
 //Measures the duty Cycle
 float readDutyCycle()
 {
   //We could get the averages of the amount measured
   int validCounts = 0,dutyCycle=0;
-  for(int i=0;i<20;i++)
-  {
-    float highDur = pulseIn(CYCLE_PIN,HIGH);
-    float lowDur = pulseIn(CYCLE_PIN,LOW);
-    if(highDur!=0&&lowDur!=0)
-    { 
-      validCounts++;
-      dutyCycle+= 100*(highDur/(highDur + lowDur));
-    }
+  float highDur = pulseIn(CYCLE_PIN,HIGH);
+  float lowDur = pulseIn(CYCLE_PIN,LOW);
+  if(highDur!=0&&lowDur!=0)
+  { 
+    dutyCycle+= 100*(highDur/(highDur + lowDur));
+    return dutyCycle/validCounts;
   }
-  if(validCounts==0)
-    return 0;
-  return dutyCycle/validCounts;
+  return 0;
 }
 //Tells me if the direction is cleared
 bool dirIsClear(int DIR)
@@ -494,7 +448,6 @@ void pickUp()
   //checks about 20 times to see if there is a magnet 
   for(int i=0;i<20;i++)
   {
-    readMagnet();
     delayMicroseconds(100);
     if(isMagnetic())
       break;
@@ -520,25 +473,10 @@ void pickUp()
 //Moves Forward until it detects something
 void forwardUntilDetect(int DIR=-1)
 {
-  //10 is temporary, I need to see the size of the Rack and Pinion
-  
-  if(DIR==-1)
-  {
-    while(readDistance(FORWARD) > bump_dist)
-    {
-      motorRun(FORWARD,255);
-      delay(50);
-    }
-    return;
-  }
   //Moves OTV forward until the direction indicated(most likely towards the center is cleared)
-  while(readDistance(FORWARD) > bump_dist)
+  while(dirIsClear(DIR))
   {
     //If The Ultrasonic sensor was passed in, detect if that side is opened
-    if(dirIsClear(DIR))
-    {
-      break;
-    }
     motorRun(FORWARD,255);
     delay(50);
   }
@@ -627,7 +565,7 @@ void testCase1()
 //Testing the Duty Cycle Measurement
 void testCase2()
 {
-  readDutyCycle();
+  Serial.println(readDutyCycle());
 }
 //Forward Locomotion
 void testCase3()
@@ -646,10 +584,10 @@ void testCase5()
 {
   readDistance(FORWARD);
 }
-//
+//Magnet
 void testCase6()
 {
-
+  Serial.println(isMagnetic());
 }
 //Avoiding one item
 void testCase7()
@@ -661,12 +599,9 @@ void testCase8()
 {
 
 }
-//Test Magnetic Fields
 void testCase9()
 {
-  readMagnet();
-  Serial.print(m_pack.x_mag);Serial.print(m_pack.y_mag);Serial.println(m_pack.z_mag);
-  Serial.println(isMagnetic());
+
 }
 //
 //Loop /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -677,8 +612,10 @@ void loop() {
     {
       //Put code into here
       //landZone();
-      testCase9();
-
+      //testCase1();
+      //testCase6();
+      //Serial.println(dirIsClear(FORWARD));
+      Serial.println(readDistance(FORWARD));
       break;
     }
     case 1:
