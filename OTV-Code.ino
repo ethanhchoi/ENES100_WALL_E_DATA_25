@@ -2,7 +2,6 @@
 #include "Enes100.h"
 #include <math.h>
 #include <Wire.h>
-#include <Tank.h>
 
 //Required downloads^^
 //Main weird ones being the TLX + Enes100/Tank(these two are imported via zip downloads)
@@ -11,8 +10,7 @@
 //Tank Protocol: {TANK_MODE:false,enVision:true,espRX:50,espTX:52}
 
 //Protocol Defining Variables: 
-#define TANK_MODE false
-#define enVision false
+#define enVision true
 
 
 //How do we Turn?? You tell me because math isn't mathing. Unless we had a whole steering system, we don't know how to turn. 
@@ -54,11 +52,6 @@
 
 //Limit Switch
 #define LIM_SWITCH_PIN 11
-
-#define TANK_L 1
-#define TANK_R 2
-#define TANK_F 3
-
 //Bias Degree
 #define BIAS_DEG 2
 //Universal orientation: General Orientation for Forward
@@ -69,7 +62,9 @@
 #define midpoint_y 1.0
 #define bump_dist 10 //cm, the distance the otv reads before turning around
 
-#define MAGNET_PIN 21
+#define MAGNET_PIN_1 19
+#define MAGNET_PIN_2 20
+#define MAGNET_PIN_3 21
 
 //Magnetic Sensor Pins: 
 //POWER Pin: Pin powering the Magnetic Sensor
@@ -112,22 +107,16 @@ int zoneCounter = 0;
 void setup() {
   Serial.begin(9600);
   Wire.begin();
-  pinMode(MAGNET_PIN,INPUT);
+  pinMode(MAGNET_PIN_1,INPUT);
+  pinMode(MAGNET_PIN_2,INPUT);
+  pinMode(MAGNET_PIN_3,INPUT);
   pinMode(CYCLE_PIN,INPUT);
-  if(!TANK_MODE)
+  //Motor Setup
+  for(int i=0;i<sizeof(motorPinArr)/sizeof(motorPinArr[0]);i++)
   {
-    //Motor Setup
-    for(int i=0;i<sizeof(motorPinArr)/sizeof(motorPinArr[0]);i++)
-    {
-      pinMode(motorPinArr[i],OUTPUT);//Every Pin is OUTPUT. En, pin1, pin2
-      if(i<4)
-        digitalWrite(motorPinArr[i],LOW);//<-- All Motors are turned off initially
-    }
-  }
-  else
-  {
-    Tank.begin();
-    Serial.println("TANK_MODE Activated");
+    pinMode(motorPinArr[i],OUTPUT);//Every Pin is OUTPUT. En, pin1, pin2
+    if(i<4)
+      digitalWrite(motorPinArr[i],LOW);//<-- All Motors are turned off initially
   }
   Serial.println("Running:");
   if(enVision)
@@ -233,30 +222,6 @@ void motorRun(int DIR, int speed)
 {
   //DIR = Direction we're going
   //speed = Speed we're going at
-  if(TANK_MODE)
-  {
-    switch(DIR)
-    {
-      case FORWARD:
-      {
-        Tank.setMotorPWM(1, 255);
-        Tank.setMotorPWM(2, 255);
-        Tank.setMotorPWM(3, 255);
-        Tank.setMotorPWM(4, 255);
-        Tank.setRightMotorPWM(speed);
-        Tank.setLeftMotorPWM(speed);
-      }
-      case LEFT:
-      {
-        Tank.setLeftMotorPWM(speed);
-      }
-      case RIGHT:
-      {
-        Tank.setRightMotorPWM(speed);
-      }
-    }
-    return;
-  }
   switch(DIR)
   {
     case FORWARD: {
@@ -331,17 +296,9 @@ void turnDirection(int DIR,int speed = 100)//Assumes 90 degrees
 //Cuts power to all wheels.
 void motorBreak()
 {
-  if(TANK_MODE)
+  for(int i=0;i<4;i++)
   {
-    Tank.turnOffMotors();
-    return;
-  }
-  else
-  {
-    for(int i=0;i<4;i++)
-    {
-      digitalWrite(motorPinArr[i],LOW);
-    }
+    digitalWrite(motorPinArr[i],LOW);
   }
 }
 //Aruco should indicate mod 90 deg. Corrects OTV if not. 
@@ -376,7 +333,8 @@ void adjustAngle()
 //Reads the distance between the Ultrasonic in the LEFT/RIGHT/FORWARD direction
 double readDistance(int DIR)
 { 
-  //Trigger Pin: Direction * 2 - 1
+  //echo Pin: Direction * 2 - 1
+  //
     int trigPin = (DIR*2)+1;
     //Low to reset pin
     digitalWrite(USPinArr[trigPin],LOW);
@@ -387,7 +345,7 @@ double readDistance(int DIR)
     digitalWrite(USPinArr[trigPin],LOW);
     
     //Speed of sound 343m/s
-    long duration = pulseIn(USPinArr[trigPin-1],HIGH);
+    long duration = pulseIn(USPinArr[trigPin-1],HIGH,30000);
     //2 is for back and forth reading
     return (double)(duration*0.0343/2);//Distance in cm
 }
@@ -398,12 +356,14 @@ double readDistance(int DIR)
 //Detects magnetic fields. 
 bool isMagnetic()
 {
-  return digitalRead(MAGNET_PIN)==LOW;
+  //Reads all magnets and sees if it detects a magnet. 
+  return digitalRead(MAGNET_PIN_1)==LOW||digitalRead(MAGNET_PIN_2)==LOW||digitalRead(MAGNET_PIN_3)==LOW;
 }
 //Corrects the angle until the closest interval
 void correctAngle(int angle = 90)
 {
   //Turn amount should be like 90 - CurrentAngle; 
+  
 }
 //Measures the duty Cycle
 float readDutyCycle()
@@ -425,7 +385,6 @@ bool dirIsClear(int DIR)
   //If Direction is smaller than a certain amount
   return readDistance(DIR) > bump_dist;
 }
-
 //Rack and Pinion//////////////////////////////////////////////////////////////////////////////////////////////
 //Rack and Pinion go down with the servo
 //Picks up the Puck and measures Duty Cycle and Puck Magnetism 
@@ -507,7 +466,7 @@ void landZone()
   //If above x coord, turn other way
   //else if below 
   //turnDirection()
-  turnToCenter(); 
+  turnToCenter();
   forwardUntilDetect();
   //Distance from Rack and Pinion to Arduino
   pickUp();
@@ -582,7 +541,8 @@ void testCase4()
 //Obstacle Sensing
 void testCase5()
 {
-  readDistance(FORWARD);
+  Serial.println(readDistance(FORWARD));
+  delay(50);
 }
 //Magnet
 void testCase6()
@@ -597,7 +557,18 @@ void testCase7()
 //void checking which way I'm facing
 void testCase8()
 {
-
+  if(currentDIR() == LEFT)
+  {
+    Serial.println("LEFT");
+  }
+  else if(currentDIR() == RIGHT)
+  {
+    Serial.println("RIGHT");
+  }
+  else if(currentDIR() == FORWARD)
+  {
+    Serial.println("FORWARD");
+  }
 }
 void testCase9()
 {
@@ -614,8 +585,8 @@ void loop() {
       //landZone();
       //testCase1();
       //testCase6();
-      //Serial.println(dirIsClear(FORWARD));
-      Serial.println(readDistance(FORWARD));
+      testCase8();
+      
       break;
     }
     case 1:
