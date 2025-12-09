@@ -34,6 +34,8 @@
 #define echoPin3 12
 #define trigPin3 13
 
+#define motorSpeed 250
+
 #define teamMarker 257
 
 //L298N Motor Pins: 
@@ -446,11 +448,11 @@ void turnToCenter()
 {
   if(c_pack.y_coord > midpoint_y)//Above midpoint line
   {
-    turnDirection(RIGHT);
+    turnSet(RIGHT,-90);
   }
   else
   {
-    turnDirection(LEFT);
+    turnSet(LEFT,90);
   }
 }
 //Zone Functions /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -464,8 +466,7 @@ void landZone()
   //Turn Right
   //Rotate until The theta is correct.  
   //If above x coord, turn other way
-  //else if below 
-  //turnDirection()
+  //else if below
   turnToCenter();
   forwardUntilDetect();
   //Distance from Rack and Pinion to Arduino
