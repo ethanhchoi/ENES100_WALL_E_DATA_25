@@ -20,6 +20,7 @@
 #define RIGHT 1
 #define LEFT 2
 #define NONE -1 // No Direction Specified 
+#define BACKWARD 3
 
 //These are the orientations given Defined by the Aruco Marker relative to the OTV
 #define F_ORI -90
@@ -261,6 +262,12 @@ void motorRun(int DIR, int speed)
       Serial.println("Turning Right");
       break;
     }
+    case BACKWARD:
+    {
+      digitalWrite(motorPinArr[0], LOW);
+      digitalWrite(motorPinArr[1], HIGH);
+      digitalWrite(motorPinArr[2], LOW);
+      digitalWrite(motorPinArr[3], HIGH);
   }
 }
 //Extra Functions for Motor turning: 
@@ -270,10 +277,11 @@ void turnSet(int DIR, int angle, int speed = 100)
 {
   //SMARTMAPPING to be added soon -> Guess which side is faster based on math and yields direction. 
   //Bias Range = ? 1-2 Deg?
-  while(c_pack.theta != angle)//Has to be some kind of bias within a range or else it will have trouble stopping
+  
+  while(c_pack.theta >= angle + BIAS_DEG || c_pack.theta <= angle - BIAS_DEG)//Has to be some kind of bias within a range or else it will have trouble stopping
   {
+    pingPacketData();
     motorRun(DIR,speed);
-    pingPacketData();//Updates the Angle data
   }
   adjustAngle();
 }
@@ -404,39 +412,6 @@ void pickUp()
     digitalWrite(LED_BUILTIN, LOW);
     delay(100); 
   }
-  /*
-  while(digitalRead(LIM_SWITCH_PIN)==LOW)//Lim switch hasnt been hit. 
-  {
-    rackServo.write(80);//Smaller the number -> Faster it is 
-    delay(100);
-  }
-  //Tells the servo to stop when it reaches the ground
-  rackServo.write(90);
-
-  //Item gets picked up and is close enough for readings.
-  //If at any point, if readMagnet() reads > (X an amount), -> break for loop
-  //checks about 20 times to see if there is a magnet 
-  for(int i=0;i<20;i++)
-  {
-    delayMicroseconds(100);
-    if(isMagnetic())
-      break;
-  }
-  if(isMagnetic())
-  {
-    //If anything is above 5 micro Gauss, --> There is a magnet
-    int dutyCycle = readDutyCycle();
-    Enes100.mission(MAGNETISM,MAGNETIC);
-    Enes100.mission(CYCLE,dutyCycle);
-  }
-  else
-  {
-    Enes100.mission(MAGNETISM,NOT_MAGNETIC);
-  }
-  //Pulls it out of the container
-  rackServo.write(150);
-  delay(300);
-  */
   
 }
 
@@ -479,7 +454,21 @@ void landZone()
   //Rotate until The theta is correct.  
   //If above x coord, turn other way
   //else if below
-  turnToCenter();
+  pingPacketData();
+  if(c_pack.y_coord > midpoint_y)//Above midpoint line
+  {
+    turnSet(RIGHT,-45);
+    motorRun(BACKWARD,
+    turnSet(RIGHT,-90);
+  }
+  else
+  {
+    turnSet(LEFT,45);
+    //backward();
+    turnSet(LEFT,90);
+  }
+  
+  
   forwardUntilDetect();
   //Distance from Rack and Pinion to Arduino
   pickUp();
@@ -595,7 +584,6 @@ void loop() {
     {
       //Put code into here
       landZone();
-      
       break;
     }
     case 1:
