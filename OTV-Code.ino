@@ -113,6 +113,7 @@ void setup() {
   pinMode(MAGNET_PIN_2,INPUT);
   pinMode(MAGNET_PIN_3,INPUT);
   pinMode(CYCLE_PIN,INPUT);
+  pinMode(LED_BUILTIN, OUTPUT);
   //Motor Setup
   for(int i=0;i<sizeof(motorPinArr)/sizeof(motorPinArr[0]);i++)
   {
@@ -396,6 +397,14 @@ void pickUp()
   //180 -> Rotate Counterclockwise
   //90 -> Stop
   //0 -> Rotate Clockwise(downward)
+  for(int i=0;i<4;i++)
+  {
+    digitalWrite(LED_BUILTIN, HIGH);   // turn the LED on (HIGH is the voltage level)
+    delay(100);                       // wait for a second
+    digitalWrite(LED_BUILTIN, LOW);
+    delay(100); 
+  }
+  /*
   while(digitalRead(LIM_SWITCH_PIN)==LOW)//Lim switch hasnt been hit. 
   {
     rackServo.write(80);//Smaller the number -> Faster it is 
@@ -427,12 +436,14 @@ void pickUp()
   //Pulls it out of the container
   rackServo.write(150);
   delay(300);
+  */
+  
 }
 
 //Nav Functions //////////////////////////////////////////////////////////////////////////////////////////////
 
 //Moves Forward until it detects something
-void forwardUntilDetect(int DIR=-1)
+void forwardUntilDetect(int DIR=FORWARD)
 {
   //Moves OTV forward until the direction indicated(most likely towards the center is cleared)
   while(dirIsClear(DIR))
@@ -446,6 +457,7 @@ void forwardUntilDetect(int DIR=-1)
 //Defaults to right if it's at the center
 void turnToCenter()
 {
+  pingPacketData();
   if(c_pack.y_coord > midpoint_y)//Above midpoint line
   {
     turnSet(RIGHT,-90);
@@ -518,7 +530,6 @@ void openZone()
 //test functions: /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void testCase1()
 {
-  pingPacketData();
   printPacketData();
   Serial.println(goalZoneDir());
 }
@@ -583,10 +594,7 @@ void loop() {
     case 0:
     {
       //Put code into here
-      //landZone();
-      //testCase1();
-      //testCase6();
-      testCase8();
+      landZone();
       
       break;
     }
