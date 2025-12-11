@@ -457,12 +457,11 @@ void pickUp()
     {
       int finalDutyCycleValue = cycleRange(readValue);
       //Print Duty Cycle here
-      Serial.println(finalDutyCycleValue);
-      //Enes100.println(finalDutyCycleValue);
+      Enes100.println(finalDutyCycleValue);
     }
     delay(200); 
   }
-    //Enes100.println("Measuring If Puck is Magnetic");
+  Enes100.println("Measuring If Puck is Magnetic");
   bool magStatus = false;
   for(int i=0;i<10;i++)
   {
@@ -471,18 +470,13 @@ void pickUp()
       break;
     delay(400);
   }
-   
   if(magStatus)
     Enes100.println("Puck is Magnetic");
   else
     Enes100.println("Puck is not magnetic");
   //Read Duty Cycle
+  rackServo.write(40);//Goes back
   delay(2000); // Rotate for 2 seconds
-  rackServo.write(0);//Goes back
-
-  // Rotate in the opposite direction (e.g., counter-clockwise)
-  //rackServo.write(0); // Values less than 90 rotate in the opposite direction, 0 is full speed
-  //delay(2000); // Rotate for 2 seconds
 }
 //Nav Functions //////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -494,24 +488,11 @@ void forwardUntilDetect(int DIR=FORWARD,int dist=40)
   while(dirIsClear(DIR))
   {
     pingPacketData();
-    if(c_pack.x_coord > )
     //If The Ultrasonic sensor was passed in, detect if that side is opened
     delay(50);
   }
   motorBreak();
   
-}
-void backwardUntilArea(int pos = 0.5)
-{
-  
-  while(c_pack.x_coord > pos + 0.1)
-  {
-    pingPacketData();
-    motorRun(BACKWARD,255);
-    delay(100);
-  }
-  motorRun(BACKWARD,60);
-  delay(300);
 }
 //Defaults to right if it's at the center
 //Fixes the turning toward the center because our turning is ass
@@ -544,15 +525,14 @@ void forwardSideDetect()
     }
   }
 }
-void forwardUntilPosX(int speed,float x_coord)
+void DIRUntilPosX(int DIR, int speed,float x_coord)
 {
   while(c_pack.x_coord < x_coord)
   {
     pingPacketData();
     motorRun(FORWARD,speed);
-    delay(100);
+    delay(60);
   }
-  
 }
 //Zone Functions /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -569,8 +549,13 @@ void landZone()
   
   turnSet(RIGHT,0,30);//Faces "Straight", speed is slow
   //Backup until Go to x = 0.5
+  pingPacketData();
+  if(c_pack.x_coord > 0.5)
+    DIRUntilPosX(BACKWARD,50,0.5);
+  else if(c_pack.x_coord < 0.5)
+    DIRUntilPosX(FORWARD,50,0.5);
+  turnToCenter();
   
-  //turnToCenter();
   forwardUntilDetect(FORWARD,15);
   //Distance from Rack and Pinion to Arduino
   pickUp();
@@ -594,7 +579,7 @@ void obsZone()
 void openZone()
 {
   //If above Y Axis
-  forwardUntilPosX(255,3.2);//Would be 2.8 but thats just math(it should be fine)
+  DIRUntilPosX(FORWARD,200,3.2);//Would be 2.8 but thats just math(it should be fine)
   if(c_pack.y_coord > midpoint_y)
   {
     turnDirection(RIGHT);
@@ -605,7 +590,7 @@ void openZone()
     turnDirection(LEFT);
     //Move until below y > 0.75
   }
-  forwardUntilPosX(255,3.9);
+  DIRUntilPosX(FORWARD,255,3.9);
 }
 //test functions: /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void testCase1()
