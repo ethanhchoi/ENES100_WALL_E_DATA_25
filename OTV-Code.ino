@@ -10,7 +10,7 @@
 //Tank Protocol: {TANK_MODE:false,enVision:true,espRX:50,espTX:52}
 
 //Protocol Defining Variables: 
-#define enVision true
+#define enVision false
 
 
 //How do we Turn?? You tell me because math isn't mathing. Unless we had a whole steering system, we don't know how to turn. 
@@ -21,6 +21,7 @@
 #define LEFT 2
 #define NONE -1 // No Direction Specified 
 #define BACKWARD 3
+#define SIDE 4
 
 //These are the orientations given Defined by the Aruco Marker relative to the OTV
 #define F_ORI -90
@@ -48,15 +49,15 @@
 #define motor2en 44
 
 //Duty Cycle Reader
-#define CYCLE_PIN 5
+#define CYCLE_PIN 7
 
 //Servo Pins
 #define servoPin 2
 
 //Limit Switch
-#define LIM_SWITCH_PIN 11
+//#define LIM_SWITCH_PIN 11
 //Bias Degree
-#define BIAS_DEG 2
+#define BIAS_DEG 1
 //Universal orientation: General Orientation for Forward
 #define UNI_F 0
 #define UNI_L 90
@@ -64,6 +65,8 @@
 //Navigation Definitions
 #define midpoint_y 1.0
 #define bump_dist 10 //cm, the distance the otv reads before turning around
+
+#define openPos 2.8
 
 #define MAGNET_PIN_1 19
 #define MAGNET_PIN_2 20
@@ -100,13 +103,14 @@ struct CoordinatePacket {
   bool isVisible;
 };
 CoordinatePacket c_pack;
-int USPinArr[6] = {echoPin1,trigPin1,echoPin2,trigPin2,echoPin3,trigPin3};//<-- Ignore for now... we might need mega
+int USPinArr[6] = {echoPin2,trigPin2,echoPin1,trigPin1,echoPin3,trigPin3};
 int motorPinArr[6] = {motor1pin1,motor1pin2,motor2pin1,motor2pin2,motor1en,motor2en};
 int initAngle = 0;
 int DIR_OR[] = {FORWARD,LEFT,RIGHT};
 int DEG_DIR[] = {F_ORI,L_ORI,R_ORI};
 //ZoneCounter
 int zoneCounter = 0;
+int turnAmount = 0;
 void setup() {
   Serial.begin(9600);
   Wire.begin();
@@ -124,9 +128,13 @@ void setup() {
   }
   Serial.println("Running:");
   if(enVision)
+  {
     visionSetup();
     Serial.println("Vision system successful");
+  }
   //Declaring Ultrasonic pins here
+  //USPinArr[0],input
+  //USPinArr[1],output
   for(int i=0;i<3;i++)
   {
     pinMode(USPinArr[2*i],INPUT);//Echo -> Input
@@ -135,7 +143,6 @@ void setup() {
   rackServo.attach(servoPin);
   //Set up the magnetometer
   //dPin, Dir
-  
 }
 //Vision Function
 void visionSetup()
@@ -162,7 +169,26 @@ int radToDeg(float radAng)
 {
   return (int)((radAng*180)/M_PI); // angle * 180(deg) / PI
 }
-
+int cycleRange(int dutyCycle)
+{
+  int possibleRanges[5] = {10,30,50,70,90};
+  //10 + 10||
+  //Possible Duty Cycle
+  int possibleCycle = 0;
+  for(int i=0;i<sizeof(possibleRanges[0]);i++)
+  {
+    if(dutyCycle < possibleRanges[i]+ 10 || dutyCycle > possibleRanges[i] - 10)
+    {
+      //If it's within the range
+      return possibleRanges[i];
+      
+    }
+    //If it's 80 flat, or incrementally flat, No Bias. Just don't accept it. 
+    //80 < 100 || 80 > 80
+  }
+  return 0;
+  //42 + 10 > X
+}
 //Vision System Functions /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //Pings the Enes100 Server.
@@ -230,12 +256,13 @@ void motorRun(int DIR, int speed)
   {
     case FORWARD: {
       //configure Motor1 to be both equal
-      for(int i=0;i<2;i++)
-      {
-        digitalWrite(motorPinArr[i],HIGH);
-        digitalWrite(motorPinArr[i+1],LOW);
-        analogWrite(motorPinArr[4+i],speed);
-      }
+      digitalWrite(motorPinArr[0], HIGH);
+      digitalWrite(motorPinArr[1], LOW);
+      digitalWrite(motorPinArr[2], HIGH);
+      digitalWrite(motorPinArr[3], LOW);
+      analogWrite(motorPinArr[4], speed);
+      analogWrite(motorPinArr[5], speed);
+      Serial.println("Moving Backwards");
       break;
     }
     case LEFT:
@@ -268,6 +295,10 @@ void motorRun(int DIR, int speed)
       digitalWrite(motorPinArr[1], HIGH);
       digitalWrite(motorPinArr[2], LOW);
       digitalWrite(motorPinArr[3], HIGH);
+      analogWrite(motorPinArr[4], speed);
+      analogWrite(motorPinArr[5], speed);
+      Serial.println("Moving Backwards");
+    }
   }
 }
 //Extra Functions for Motor turning: 
@@ -277,32 +308,37 @@ void turnSet(int DIR, int angle, int speed = 100)
 {
   //SMARTMAPPING to be added soon -> Guess which side is faster based on math and yields direction. 
   //Bias Range = ? 1-2 Deg?
-  
+  //Set 0 DEgrees
+  //3 >= 0 + 2 or 3 <= 0 - 2
   while(c_pack.theta >= angle + BIAS_DEG || c_pack.theta <= angle - BIAS_DEG)//Has to be some kind of bias within a range or else it will have trouble stopping
   {
     pingPacketData();
     motorRun(DIR,speed);
+    delay(40);
   }
-  adjustAngle();
 }
 //Turns 90 degrees in a direction L/R
 void turnDirection(int DIR,int speed = 100)//Assumes 90 degrees
 {
-  //LEFT = I would turn left 90 deg
-  //RIGHT = I would turn right 90 deg
-  int initDeg = c_pack.theta;
-  int degAddVal = 0;
-  //Determines which way to turn. 
+  if(DIR!=LEFT||DIR!=RIGHT)
+    return;//Safety mechanism ig
+  //Should be 45 turn Direction
+  ///backup Some amount
+  //45 Again
+  //Thought process: We either turn going L/R
+  //wall detect
+  pingPacketData();
+  int currentTheta = c_pack.theta;
+  int angleChange = 0;
   if(DIR==LEFT)
-    degAddVal = -90;
+    angleChange = -45;
   else
-    degAddVal = 90;
-  int goalDeg = degAddVal+initDeg;//Initial Degree Count + 90|-90
-  //While the orientation is not facing goal direction
-  while(c_pack.theta!=goalDeg)
-  {
-    motorRun(DIR,speed);
-  }
+    angleChange = 45;
+  //Rotate until current_theta +- 45
+  turnSet(DIR,currentTheta+angleChange,speed);//Turn From current position LEFT/RIGHT 45 Degrees
+  motorRun(BACKWARD,speed);
+  delay(300);
+  turnSet(DIR,currentTheta+angleChange,speed);//Turn From current position LEFT/RIGHT 45 Degrees
 }
 //Cuts power to all wheels.
 void motorBreak()
@@ -311,6 +347,8 @@ void motorBreak()
   {
     digitalWrite(motorPinArr[i],LOW);
   }
+  analogWrite(motorPinArr[4],0);
+  analogWrite(motorPinArr[5],0);
 }
 //Aruco should indicate mod 90 deg. Corrects OTV if not. 
 void adjustAngle()
@@ -342,7 +380,7 @@ void adjustAngle()
 //Ultrasonic Sensor Function /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //Reads the distance between the Ultrasonic in the LEFT/RIGHT/FORWARD direction
-double readDistance(int DIR)
+float readDistance(int DIR)
 { 
   //echo Pin: Direction * 2 - 1
   //
@@ -358,7 +396,9 @@ double readDistance(int DIR)
     //Speed of sound 343m/s
     long duration = pulseIn(USPinArr[trigPin-1],HIGH,30000);
     //2 is for back and forth reading
-    return (double)(duration*0.0343/2);//Distance in cm
+    float dist = (duration*0.0343*0.5);//Distance in cm
+    if (dist == 0 || dist > 400) dist = 0;//Outlier distances
+    return dist;
 }
 //Might consider making a function that tells me which side is blocked
 
@@ -380,21 +420,21 @@ void correctAngle(int angle = 90)
 float readDutyCycle()
 {
   //We could get the averages of the amount measured
-  int validCounts = 0,dutyCycle=0;
-  float highDur = pulseIn(CYCLE_PIN,HIGH);
-  float lowDur = pulseIn(CYCLE_PIN,LOW);
+  float dutyCycle=0;
+  float highDur = pulseIn(CYCLE_PIN,HIGH,30000);
+  float lowDur = pulseIn(CYCLE_PIN,LOW,30000);
   if(highDur!=0&&lowDur!=0)
   { 
-    dutyCycle+= 100*(highDur/(highDur + lowDur));
-    return dutyCycle/validCounts;
+    dutyCycle= 100*(highDur/(highDur + lowDur));
+    return dutyCycle;
   }
   return 0;
 }
 //Tells me if the direction is cleared
-bool dirIsClear(int DIR)
+bool dirIsClear(int DIR,int distance=bump_dist)
 {
   //If Direction is smaller than a certain amount
-  return readDistance(DIR) > bump_dist;
+  return readDistance(DIR) > distance;// distanceRead> 10cm
 }
 //Rack and Pinion//////////////////////////////////////////////////////////////////////////////////////////////
 //Rack and Pinion go down with the servo
@@ -405,42 +445,114 @@ void pickUp()
   //180 -> Rotate Counterclockwise
   //90 -> Stop
   //0 -> Rotate Clockwise(downward)
-  for(int i=0;i<4;i++)
-  {
-    digitalWrite(LED_BUILTIN, HIGH);   // turn the LED on (HIGH is the voltage level)
-    delay(100);                       // wait for a second
-    digitalWrite(LED_BUILTIN, LOW);
-    delay(100); 
-  }
+  //Checks Magnetism
+  rackServo.write(180); //Goes Down
+  delay(1000);
+  rackServo.write(90);//Stops
   
-}
+  for(int i=0;i<20;i++)
+  {
+    int readValue = readDutyCycle();
+    if(readValue!=0)
+    {
+      int finalDutyCycleValue = cycleRange(readValue);
+      //Print Duty Cycle here
+      Serial.println(finalDutyCycleValue);
+      //Enes100.println(finalDutyCycleValue);
+    }
+    delay(200); 
+  }
+    //Enes100.println("Measuring If Puck is Magnetic");
+  bool magStatus = false;
+  for(int i=0;i<10;i++)
+  {
+    if(isMagnetic())
+      magStatus = true;
+      break;
+    delay(400);
+  }
+   
+  if(magStatus)
+    Enes100.println("Puck is Magnetic");
+  else
+    Enes100.println("Puck is not magnetic");
+  //Read Duty Cycle
+  delay(2000); // Rotate for 2 seconds
+  rackServo.write(0);//Goes back
 
+  // Rotate in the opposite direction (e.g., counter-clockwise)
+  //rackServo.write(0); // Values less than 90 rotate in the opposite direction, 0 is full speed
+  //delay(2000); // Rotate for 2 seconds
+}
 //Nav Functions //////////////////////////////////////////////////////////////////////////////////////////////
 
 //Moves Forward until it detects something
-void forwardUntilDetect(int DIR=FORWARD)
+void forwardUntilDetect(int DIR=FORWARD,int dist=40)
 {
   //Moves OTV forward until the direction indicated(most likely towards the center is cleared)
+  motorRun(FORWARD,255);
   while(dirIsClear(DIR))
   {
+    pingPacketData();
+    if(c_pack.x_coord > )
     //If The Ultrasonic sensor was passed in, detect if that side is opened
-    motorRun(FORWARD,255);
     delay(50);
   }
+  motorBreak();
+  
 }
-//Turns the OTV in the direction of where the center point is
+void backwardUntilArea(int pos = 0.5)
+{
+  
+  while(c_pack.x_coord > pos + 0.1)
+  {
+    pingPacketData();
+    motorRun(BACKWARD,255);
+    delay(100);
+  }
+  motorRun(BACKWARD,60);
+  delay(300);
+}
 //Defaults to right if it's at the center
+//Fixes the turning toward the center because our turning is ass
 void turnToCenter()
 {
-  pingPacketData();
-  if(c_pack.y_coord > midpoint_y)//Above midpoint line
+  turnDirection(goalZoneDir());
+}
+void forwardSideDetect()
+{
+  //Move forward until the direction towards center is cleared
+  bool successfulTurn = false;
+  while(dirIsClear(FORWARD))//This should be changed to y position y > 0.0 OR y < 2.0
   {
-    turnSet(RIGHT,-90);
+    motorRun(FORWARD,150);
+    delay(60);
+    
+    //If Direction towards goalzone is cleared up, 
+    if(dirIsClear(goalZoneDir()))
+    {
+      //If the direction of the goalzone is blocked and front is blocked
+      //180 and repeat
+      turnToCenter();
+      //turnSet(goalZoneDir(),0);
+      //forwardUntilDetect(goalZoneDir());
+      if(turnAmount<2)
+        turnAmount++;//I'm being lazy
+      else
+        zoneCounter++;//Switches to the next zone
+      break;
+    }
   }
-  else
+}
+void forwardUntilPosX(int speed,float x_coord)
+{
+  while(c_pack.x_coord < x_coord)
   {
-    turnSet(LEFT,90);
+    pingPacketData();
+    motorRun(FORWARD,speed);
+    delay(100);
   }
+  
 }
 //Zone Functions /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -454,22 +566,12 @@ void landZone()
   //Rotate until The theta is correct.  
   //If above x coord, turn other way
   //else if below
-  pingPacketData();
-  if(c_pack.y_coord > midpoint_y)//Above midpoint line
-  {
-    turnSet(RIGHT,-45);
-    motorRun(BACKWARD,
-    turnSet(RIGHT,-90);
-  }
-  else
-  {
-    turnSet(LEFT,45);
-    //backward();
-    turnSet(LEFT,90);
-  }
   
+  turnSet(RIGHT,0,30);//Faces "Straight", speed is slow
+  //Backup until Go to x = 0.5
   
-  forwardUntilDetect();
+  //turnToCenter();
+  forwardUntilDetect(FORWARD,15);
   //Distance from Rack and Pinion to Arduino
   pickUp();
   turnDirection(goalZoneDir());
@@ -480,41 +582,30 @@ void landZone()
 void obsZone()
 {
   //Moves forward until something is detected
-  forwardUntilDetect();
+  
+  forwardUntilDetect(FORWARD,30);
   //Turns the direction towards the center point y > 1 or y < 1
   turnToCenter();
-  //Move forward until the direction towards center is cleared
-  forwardUntilDetect(goalZoneDir());
-  //Either both sides are blocked or 
-  /*
-  if(!dirIsClear(goalZoneDir()) && !dirIsClear(FRONT))
-  {
-    //If the direction of the goalzone is blocked and front is blocked
-    //180 and repeat
-    turnSet(goalZoneDir(),180);
-    forwardUntilDetect(goalZoneDir());
-  }
-  */
+  //This should get the thing towards an open zone 
+  forwardSideDetect();
+  
 }
 //Navigates the Open Zone
 void openZone()
 {
   //If above Y Axis
-  if(c_pack.y_coord > 0.75)
+  forwardUntilPosX(255,3.2);//Would be 2.8 but thats just math(it should be fine)
+  if(c_pack.y_coord > midpoint_y)
   {
     turnDirection(RIGHT);
-    while(c_pack.y_coord > 0.75)
+    while(c_pack.y_coord > midpoint_y)
     {
       motorRun(FORWARD,255);
     }
     turnDirection(LEFT);
     //Move until below y > 0.75
   }
-  //MoveOverLog
-  while(c_pack.x_coord < 3.76)
-  {
-    motorRun(FORWARD,255);
-  }
+  forwardUntilPosX(255,3.9);
 }
 //test functions: /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void testCase1()
@@ -573,7 +664,7 @@ void testCase8()
 }
 void testCase9()
 {
-
+  
 }
 //
 //Loop /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
