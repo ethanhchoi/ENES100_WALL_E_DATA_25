@@ -10,7 +10,7 @@
 //Tank Protocol: {TANK_MODE:false,enVision:true,espRX:50,espTX:52}
 
 //Protocol Defining Variables: 
-#define enVision false
+#define enVision true
 
 
 //How do we Turn?? You tell me because math isn't mathing. Unless we had a whole steering system, we don't know how to turn. 
@@ -21,7 +21,6 @@
 #define LEFT 2
 #define NONE -1 // No Direction Specified 
 #define BACKWARD 3
-#define SIDE 4
 
 //These are the orientations given Defined by the Aruco Marker relative to the OTV
 #define F_ORI -90
@@ -126,15 +125,12 @@ void setup() {
     if(i<4)
       digitalWrite(motorPinArr[i],LOW);//<-- All Motors are turned off initially
   }
-  Serial.println("Running:");
   if(enVision)
   {
     visionSetup();
     Serial.println("Vision system successful");
   }
   //Declaring Ultrasonic pins here
-  //USPinArr[0],input
-  //USPinArr[1],output
   for(int i=0;i<3;i++)
   {
     pinMode(USPinArr[2*i],INPUT);//Echo -> Input
@@ -143,23 +139,17 @@ void setup() {
   rackServo.attach(servoPin);
   //Set up the magnetometer
   //dPin, Dir
+  delay(2000);
 }
 //Vision Function
 void visionSetup()
 {
   char teamName[] = "Wall-E";
   Enes100.begin("Wall-E",DATA,teamMarker,1120,espTX,espRX);//; Vision System down...
-  Enes100.println("We Connected");
-  //If (isConnected() + isVisible()) -> True? 
+  delay(100);
   if(Enes100.isConnected())
   {
-    Serial.println("Initiated Connection: ");
-    delay(100);
     Enes100.println("Wall-E Connected ");
-    pingPacketData();
-    delay(300);
-    printPacketData();
-    //This is honestly a bunch of garbage I made for our people to visualize the outputs. 
   }
 }
 //Helper Function /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -262,7 +252,6 @@ void motorRun(int DIR, int speed)
       digitalWrite(motorPinArr[3], LOW);
       analogWrite(motorPinArr[4], speed);
       analogWrite(motorPinArr[5], speed);
-      Serial.println("Moving Backwards");
       break;
     }
     case LEFT:
@@ -274,7 +263,6 @@ void motorRun(int DIR, int speed)
       digitalWrite(motorPinArr[3],LOW);
       analogWrite(motorPinArr[4],speed);
       analogWrite(motorPinArr[5],speed);
-      Serial.println("Turning Left");
       break;
     }
     case RIGHT:
@@ -286,7 +274,6 @@ void motorRun(int DIR, int speed)
       digitalWrite(motorPinArr[3],HIGH);
       analogWrite(motorPinArr[4],speed);
       analogWrite(motorPinArr[5],speed);
-      Serial.println("Turning Right");
       break;
     }
     case BACKWARD:
@@ -297,7 +284,6 @@ void motorRun(int DIR, int speed)
       digitalWrite(motorPinArr[3], HIGH);
       analogWrite(motorPinArr[4], speed);
       analogWrite(motorPinArr[5], speed);
-      Serial.println("Moving Backwards");
     }
   }
 }
@@ -310,10 +296,11 @@ void turnSet(int DIR, int angle, int speed = 100)
   //Bias Range = ? 1-2 Deg?
   //Set 0 DEgrees
   //3 >= 0 + 2 or 3 <= 0 - 2
-  while(c_pack.theta >= angle + BIAS_DEG || c_pack.theta <= angle - BIAS_DEG)//Has to be some kind of bias within a range or else it will have trouble stopping
+  //c_pack.theta < angle + BIAS_DEG && c_pack.theta > angle - BIAS_DEG //Puts the Thing into range
+  while(c_pack.theta > angle + BIAS_DEG || c_pack.theta < angle - BIAS_DEG)//Has to be some kind of bias within a range or else it will have trouble stopping
   {
-    pingPacketData();
     motorRun(DIR,speed);
+    pingPacketData();
     delay(40);
   }
 }
@@ -336,7 +323,6 @@ void turnDirection(int DIR,int speed = 100)//Assumes 90 degrees
     angleChange = 45;
   //Rotate until current_theta +- 45
   turnSet(DIR,currentTheta+angleChange,speed);//Turn From current position LEFT/RIGHT 45 Degrees
-  motorRun(BACKWARD,speed);
   delay(300);
   turnSet(DIR,currentTheta+angleChange,speed);//Turn From current position LEFT/RIGHT 45 Degrees
 }
@@ -357,7 +343,6 @@ void adjustAngle()
   //Plan 2: Rotate to the desired rotation (pass in a value)
   if(c_pack.theta%90==0)
     return;  
- //math.abs(-90 - c_pack.theta)
   //Turn by this much until we hit this angle
   int offsetAngle = c_pack.theta%90;
   //-90 | 0 | 90
@@ -515,7 +500,6 @@ void forwardSideDetect()
       //If the direction of the goalzone is blocked and front is blocked
       //180 and repeat
       turnToCenter();
-      //turnSet(goalZoneDir(),0);
       //forwardUntilDetect(goalZoneDir());
       if(turnAmount<2)
         turnAmount++;//I'm being lazy
@@ -659,7 +643,8 @@ void loop() {
     case 0:
     {
       //Put code into here
-      landZone();
+      //landZone();
+      pickUp();
       break;
     }
     case 1:
